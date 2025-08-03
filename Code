@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Candidate Dashboard</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #e6f3ff;
+      padding: 2px;
+    }
+
+    h2 {
+      text-align: center;
+      color: #003366;
+      margin-bottom: 20px;
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    select, input[type="text"] {
+      padding: 10px;
+      font-size: 15px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      min-width: 200px;
+    }
+
+    button {
+      padding: 10px 16px;
+      font-size: 15px;
+      background-color: #0077cc;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #005fa3;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: #fff;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 5px;
+      border: 2px solid #cce0ff;
+      text-align: center;
+    }
+
+    th {
+      background-color: #004080;
+      color: white;
+      font-size: 15px;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 768px) {
+      .filters {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      select, input[type="text"], button {
+        width: 100%;
+      }
+    }
+
+    .popup-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 100%;
+      background: rgba(0,0,0,0.6);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .popup-content {
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      width: 90%;
+      max-width: 400px;
+      box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+      animation: popup 0.3s ease-in-out;
+    }
+
+    @keyframes popup {
+      0% { transform: scale(0.5); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .popup-content h3 {
+      margin-top: 0;
+      color: #003366;
+      text-align: center;
+    }
+
+    .popup-content label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    .popup-content select, .popup-content textarea {
+      width: 100%;
+      margin-top: 5px;
+    }
+
+    .popup-buttons {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<h2>TCC Candidate Management Dashboard</h2>
+
+<div class="filters">
+  <label>
+    Search by Name:
+    <input type="text" id="nameSearch" placeholder="Enter candidate name" />
+  </label>
+  <button onclick="applyFilters(true)">Search</button>
+
+  <label>
+    Company:
+    <select id="companySelect" onchange="applyFilters()">
+      <option value="">-- All Companies --</option>
+    </select>
+  </label>
+
+  <label>
+    Final Status:
+    <select id="statusSelect" onchange="applyFilters()">
+      <option value="">-- All Final Status --</option>
+    </select>
+  </label>
+</div>
+
+<table id="candidateTable">
+  <thead>
+    <tr>
+      <th>Last Updated</th>
+      <th>Name</th>
+      <th>Email</th>
+      <th>Position</th>
+      <th>Recruiter</th>
+      <th>Company</th>
+      <th>Final Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td colspan="7">Loading Please Wait...</td></tr>
+  </tbody>
+</table>
+
+<!-- Popup -->
+<div class="popup-overlay" id="popup">
+  <div class="popup-content">
+    <h3 id="popupTitle">Updating Details</h3>
+    <p><strong>Candidate:</strong> <span id="popupCandidateName"></span></p>
+    <p><strong>Company:</strong> <span id="popupCompany"></span></p>
+    <p><strong>Position:</strong> <span id="popupPosition"></span></p>
+
+    <label for="statusDropdown">Status:</label>
+    <select id="statusDropdown" onchange="updateFinalStatusOptions()">
+      <option value="">Select Status</option>
+      <option value="Selected">Selected</option>
+      <option value="Rejected">Rejected</option>
+      <option value="On Hold">On Hold</option>
+    </select>
+
+    <label for="finalStatusDropdown">Final Status:</label>
+    <select id="finalStatusDropdown">
+      <option value="">Select Final Status</option>
+    </select>
+
+    <label for="commentBox">Comment (optional):</label>
+    <textarea id="commentBox" rows="3" placeholder="Enter any comment..."></textarea>
+
+    <div class="popup-buttons">
+      <button onclick="submitFinalStatusUpdate()">Submit</button>
+      <button onclick="closePopup()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let candidates = [];
+let currentEmail = "";
+const postURL = "https://script.google.com/macros/s/AKfycbwAru_5iah71LYYqh5CNrdt13tNP2sWLy7yzhbnNel2Q1wsojRRTYgn_wawfLHttN9R/exec";
+const dataURL = "https://script.google.com/macros/s/AKfycbwhlc_lnb2OaC-W1g2WGI0X15H4VmzykIg_FejVvucVqtEc-mO65vU1_QOPY0YBQ1HU/exec";
+
+const tableBody = document.querySelector("#candidateTable tbody");
+const companySelect = document.getElementById("companySelect");
+const statusSelect = document.getElementById("statusSelect");
+const nameSearchInput = document.getElementById("nameSearch");
+
+fetch(dataURL)
+  .then(res => res.json())
+  .then(data => {
+    candidates = data;
+    loadCompanyOptions();
+    loadStatusOptions();
+    applyFilters();
+  })
+  .catch(err => {
+    tableBody.innerHTML = '<tr><td colspan="7">Error loading data</td></tr>';
+    console.error(err);
+  });
+
+function loadCompanyOptions() {
+  const companies = [...new Set(candidates.map(c => c.company))];
+  companySelect.innerHTML = '<option value="">-- All Companies --</option>';
+  companies.forEach(company => {
+    const opt = document.createElement("option");
+    opt.value = company;
+    opt.textContent = company;
+    companySelect.appendChild(opt);
+  });
+}
+
+function loadStatusOptions() {
+  const statuses = [...new Set(candidates.map(c => (c.final_status || '').toLowerCase()).filter(Boolean))];
+  statusSelect.innerHTML = '<option value="">-- All Final Status --</option>';
+  statuses.forEach(status => {
+    const opt = document.createElement("option");
+    opt.value = status;
+    opt.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+    statusSelect.appendChild(opt);
+  });
+}
+
+function applyFilters(isNameSearch = false) {
+  const selectedCompany = companySelect.value;
+  const selectedStatus = statusSelect.value;
+  const nameQuery = nameSearchInput.value.toLowerCase().trim();
+
+  const filtered = candidates.filter(c => {
+    const matchCompany = !selectedCompany || c.company === selectedCompany;
+    const matchStatus = !selectedStatus || (c.final_status || '').toLowerCase() === selectedStatus;
+    const matchName = isNameSearch ? c.name.toLowerCase().includes(nameQuery) : true;
+    return matchCompany && matchStatus && matchName;
+  });
+
+  renderTable(filtered);
+}
+
+function formatTimestamp(ts) {
+  const date = new Date(ts);
+  if (isNaN(date)) return ts;
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yy = String(date.getFullYear()).slice(-2);
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  return `${dd}-${mm}-${yy} ${hours}:${minutes} ${ampm}`;
+}
+
+function renderTable(data) {
+  tableBody.innerHTML = "";
+  if (data.length === 0) {
+    tableBody.innerHTML = '<tr><td colspan="7">No candidates found</td></tr>';
+    return;
+  }
+
+  data.forEach(c => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${formatTimestamp(c.timestamp)}</td>
+      <td>${c.name}</td>
+      <td>${c.email}</td>
+      <td>${c.position}</td>
+      <td>${(c.recruiter || '').split("@")[0]}</td>
+      <td>${c.company}</td>
+      <td>${c.final_status || ''}</td>
+    `;
+    row.addEventListener("click", () => openPopup(c));
+    tableBody.appendChild(row);
+  });
+}
+
+function openPopup(candidate) {
+  currentEmail = candidate.email;
+  document.getElementById("popupCandidateName").textContent = candidate.name;
+  document.getElementById("popupCompany").textContent = candidate.company;
+  document.getElementById("popupPosition").textContent = candidate.position;
+  document.getElementById("statusDropdown").value = "";
+  document.getElementById("finalStatusDropdown").innerHTML = '<option value="">Select Final Status</option>';
+  document.getElementById("commentBox").value = "";
+
+  document.getElementById("popup").style.display = "flex";
+}
+
+function closePopup() {
+  document.getElementById("popup").style.display = "none";
+}
+
+function updateFinalStatusOptions() {
+  const status = document.getElementById("statusDropdown").value;
+  const finalStatusDropdown = document.getElementById("finalStatusDropdown");
+  finalStatusDropdown.innerHTML = '<option value="">Select Final Status</option>';
+
+  const statusOptions = {
+    "Selected": ["Shortlisted", "L1 Selected", "L2 Selected", "L3 Selected", "Final Select"],
+    "Rejected": ["Not Shortlisted", "L1 Reject", "L2 Reject", "L3 Reject"],
+    "On Hold": ["Position On Hold", "Candidate On Hold"]
+  };
+
+  (statusOptions[status] || []).forEach(s => {
+    const opt = document.createElement("option");
+    opt.value = s;
+    opt.textContent = s;
+    finalStatusDropdown.appendChild(opt);
+  });
+}
+
+function submitFinalStatusUpdate() {
+  const status = document.getElementById("statusDropdown").value;
+  const finalStatus = document.getElementById("finalStatusDropdown").value;
+  const comment = document.getElementById("commentBox").value;
+
+  if (!currentEmail || !status || !finalStatus) {
+    alert("Please select both status and final status.");
+    return;
+  }
+
+  fetch(postURL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      email: currentEmail,
+      status: status,
+      final_status: finalStatus,
+      comment: comment
+    })
+  })
+  .then(() => {
+    alert("Update submitted successfully.");
+    closePopup();
+    // Reload data (instead of full page reload)
+    fetch("https://script.google.com/macros/s/AKfycbwhlc_lnb2OaC-W1g2WGI0X15H4VmzykIg_FejVvucVqtEc-mO65vU1_QOPY0YBQ1HU/exec")
+      .then(res => res.json())
+      .then(data => {
+        candidates = data;
+        applyFilters();
+      })
+      .catch(err => {
+        console.error("Failed to reload data:", err);
+        tableBody.innerHTML = '<tr><td colspan="7">Error reloading data</td></tr>';
+      });
+  })
+  .catch(error => {
+    console.error("Fetch failed:", error);
+    alert("Update failed. See console for error.");
+  });
+}
+</script>
+
+</body>
+</html>
